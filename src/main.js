@@ -1,4 +1,5 @@
-import './style.css'
+import './style.css';
+import { gsap } from 'gsap';
 //NOTES als je weer opnieuw moet leren
 //videotextures later toevoegen?
 
@@ -17,8 +18,43 @@ camera.position.set(10.656702417456287, 6.65422849440972, 8.801249875222876);
 
 const intersectObjects = [];
 const raycaster = new THREE.Raycaster();
+let currentIntersects = [];
 const pointer = new THREE.Vector2();
 
+//links
+const links = {
+    "vinyl": 'https://open.spotify.com/playlist/3cYtUxSr9T3rnCFuDbgGtD?si=4c9709f998e94abd',
+    "poster": 'https://youtu.be/01WEqntM1NI',
+};
+
+//modal knoppen
+const modals = {
+  work: document.querySelector('.work.modal'),
+  about: document.querySelector('.about.modal'),
+  contact: document.querySelector('.contact.modal'),
+};
+
+const showModal = (modal) => {
+  modal.style.display = 'block';
+//gsap niet vergeten te importeren bovenaan
+  gsap.set(modal, { opacity: 0, y: -50 });
+  gsap.to(modal, { opacity: 1, y: 10, duration: 0.5});  
+}
+
+const hideModal = (modal) => {
+  gsap.to(modal, { opacity: 0, y: -50, duration: 0.5, onComplete: () => {
+    modal.style.display = 'none';
+  }});
+}
+
+document.querySelectorAll('.modal-close').forEach((button) => {
+  button.addEventListener('click', () => {
+    const modal = button.closest('.modal');
+    hideModal(modal);
+  });
+});
+
+//renderer
 const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
 renderer.setSize( sizes.width, sizes.height );
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -44,6 +80,15 @@ myTexture.colorSpace = THREE.SRGBColorSpace;
 loader.load('/models/portfolio_room.glb', function (glb) {
     const model = glb.scene;
 
+    glb.scene.traverse((child) => {
+        if (child.isMesh) {
+            if (child.name.includes("hover")) 
+              {
+                intersectObjects.push(child);
+            }
+        }
+    });
+
 //add textures
     model.traverse(function (child) {
         if (child.isMesh) {
@@ -54,8 +99,6 @@ loader.load('/models/portfolio_room.glb', function (glb) {
             child.material.map.minFilter = THREE.LinearFilter;
         }
     });
-
-
 
     scene.add(model);
 
@@ -75,6 +118,24 @@ window.addEventListener('mousemove', (e) => {
     pointer.y = - (e.clientY / window.innerHeight) * 2 + 1;
 });
 
+window.addEventListener('click', () => {
+    if (currentIntersects.length > 0) {
+        const object = currentIntersects[0].object;
+        if (object.name.includes("vinyl")) {
+            window.open(links.vinyl, "_blank");
+        } else if (object.name.includes("poster")) {
+            window.open(links.poster, "_blank");
+        }
+
+        if (object.name.includes("work")) {
+            showModal(modals.work);
+        } else if (object.name.includes("about")) {
+            showModal(modals.about);
+        } else if (object.name.includes("contact")) {
+            showModal(modals.contact);
+        }
+    }
+});
 
 //resizing van scherm
 function handleResize() {
@@ -95,14 +156,18 @@ function animate() {
     renderer.render(scene, camera);
     raycaster.setFromCamera(pointer, camera);
 
-    const intersects = raycaster.intersectObjects(intersectObjects);
-    for (let i = 0; i < intersects.length; i++) {
-        intersects[i].object.material.color.set(0xff0000);
+    currentIntersects = raycaster.intersectObjects(intersectObjects);
+    for (let i = 0; i < currentIntersects.length; i++) {
     }
-    if (intersects.length > 0) {
+    if (currentIntersects.length > 0) {
+      const currentIntersectObject = currentIntersects[0].object;    
+      if(currentIntersectObject.name.includes("hover")) {
         document.body.style.cursor = 'pointer';
+    } else {
+        document.body.style.cursor = 'default';
     }
-    else {
+    
+    } else {
         document.body.style.cursor = 'default';
     }
 }
