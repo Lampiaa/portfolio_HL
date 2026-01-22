@@ -6,6 +6,7 @@
 //en het bestand opmaken PLEASE mijn ogen doen pijn en het is net een doolhof
 // piano opnieuw animeren in blender T_T
 //modals opmaken
+//camera control limit toevoegen
 
 import './style.css';
 import { gsap } from 'gsap';
