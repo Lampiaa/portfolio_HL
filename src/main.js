@@ -1,8 +1,14 @@
-import './style.css';
-import { gsap } from 'gsap';
+
 //NOTES als je weer opnieuw moet leren
 //videotextures later toevoegen?
+//schaap andere naam geven en losse animatie toevoegen
+// pointer voor schaap weghalen
+//en het bestand opmaken PLEASE mijn ogen doen pijn en het is net een doolhof
+// piano opnieuw animeren in blender T_T
+//modals opmaken
 
+import './style.css';
+import { gsap } from 'gsap';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
@@ -19,7 +25,10 @@ camera.position.set(10.656702417456287, 6.65422849440972, 8.801249875222876);
 const intersectObjects = [];
 const raycaster = new THREE.Raycaster();
 let currentIntersects = [];
+let currentHoveredObject = null;
 const pointer = new THREE.Vector2();
+let animationMixer = null; //animatie van de piano
+const clock = new THREE.Clock();
 
 //links
 const links = {
@@ -27,6 +36,7 @@ const links = {
     "poster": 'https://youtu.be/01WEqntM1NI',
 };
 
+let isModalOpen = false;
 //modal knoppen
 const modals = {
   work: document.querySelector('.work.modal'),
@@ -36,23 +46,63 @@ const modals = {
 
 const showModal = (modal) => {
   modal.style.display = 'block';
+  isModalOpen = true;
+  controls.enabled = false;
+  
 //gsap niet vergeten te importeren bovenaan
   gsap.set(modal, { opacity: 0, y: -50 });
-  gsap.to(modal, { opacity: 1, y: 10, duration: 0.5});  
+  gsap.to(modal, { opacity: 1, y: 0, duration: 0.5});  
 }
 
 const hideModal = (modal) => {
+  isModalOpen = false;
+  controls.enabled = true;
   gsap.to(modal, { opacity: 0, y: -50, duration: 0.5, onComplete: () => {
     modal.style.display = 'none';
   }});
 }
 
+//mobile en mouse erbij
+document.querySelectorAll('.modal-close').forEach((button) => {
+  button.addEventListener('touchend', () => {
+    const modal = button.closest('.modal');
+    hideModal(modal);
+  });
+}, { passive: false });
+
+//click  doet hier niet raar, maar bij de links wel
 document.querySelectorAll('.modal-close').forEach((button) => {
   button.addEventListener('click', () => {
     const modal = button.closest('.modal');
     hideModal(modal);
   });
-});
+}, { passive: false });
+
+
+//animatie on hover
+function playHoverAnimation(object, isHovering) {
+    gsap.killTweensOf(object.scale);//position en rotation ook toevoegen als je die doet
+    object.userData.isAnimating = true;
+
+    if (isHovering) {
+        gsap.to(object.scale, { 
+            x: object.userData.initialScale.x * 1.3, 
+            y: object.userData.initialScale.y * 1.3, 
+            z: object.userData.initialScale.z * 1.3, 
+            duration: 0.3,
+            ease: "bounce.Out(1.8)",
+        });
+}
+    else {
+        gsap.to(object.scale, { 
+            x: object.userData.initialScale.x, 
+            y: object.userData.initialScale.y, 
+            z: object.userData.initialScale.z, 
+            duration: 0.2,
+            ease: "bounce.Out(1.8)",
+        });
+      }
+}
 
 //renderer
 const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
@@ -66,7 +116,7 @@ const textureLoader = new THREE.TextureLoader();
 
 //model loader (met npm install en vite draco map halen uit node modules)
 const dracoLoader = new DRACOLoader();
-dracoLoader.setDecoderPath( '/draco/' );
+dracoLoader.setDecoderPath('/draco/');
 
 const loader = new GLTFLoader();
 loader.setDRACOLoader( dracoLoader );
@@ -80,11 +130,23 @@ myTexture.colorSpace = THREE.SRGBColorSpace;
 loader.load('/models/portfolio_room.glb', function (glb) {
     const model = glb.scene;
 
+    // animatie van piano
+    animationMixer = new THREE.AnimationMixer(model);
+    
+    // speelt elke animatie, timing klopt niet dus moet het in blender 1 object maken en animeren
+    glb.animations.forEach((clip) => {
+        const action = animationMixer.clipAction(clip);
+        action.loop = THREE.LoopRepeat;
+        action.play();
+    });
+    
     glb.scene.traverse((child) => {
         if (child.isMesh) {
-            if (child.name.includes("hover")) 
-              {
+            if (child.name.includes("hover")) {
                 intersectObjects.push(child);
+                child.userData.initialScale = new THREE.Vector3().copy(child.scale);
+                child.userData.initialrotation = new THREE.Euler().copy(child.rotation);
+                child.userData.initialposition = new THREE.Vector3().copy(child.position);
             }
         }
     });
@@ -101,7 +163,6 @@ loader.load('/models/portfolio_room.glb', function (glb) {
     });
 
     scene.add(model);
-
 }
 );
 
@@ -113,12 +174,7 @@ controls.update();
 controls.target.set(0.36045345205173307, 2.5301161101917504, -0.22702658315286672);
 
 //clickable dingen
-window.addEventListener('mousemove', (e) => {
-    pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
-    pointer.y = - (e.clientY / window.innerHeight) * 2 + 1;
-});
-
-window.addEventListener('click', () => {
+function handleRaycaster() {
     if (currentIntersects.length > 0) {
         const object = currentIntersects[0].object;
         if (object.name.includes("vinyl")) {
@@ -135,7 +191,35 @@ window.addEventListener('click', () => {
             showModal(modals.contact);
         }
     }
+}
+
+window.addEventListener('mousemove', (e) => {
+    pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+    pointer.y = - (e.clientY / window.innerHeight) * 2 + 1;
 });
+
+// mouse down in plaats van click voor accidental kliks on camera beweging
+window.addEventListener('mousedown', handleRaycaster);
+
+// optimization voor apple en touch devices
+window.addEventListener('touchstart', (e) => {
+  e.preventDefault()
+    pointer.x = (e.touches[0].clientX / window.innerWidth) * 2 - 1;
+    pointer.y = - (e.touches[0].clientY / window.innerHeight) * 2 + 1;
+    handleRaycaster();
+}, { passive: false })
+
+//als je terug komt op de pagina gaat de camera niet crazy
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    controls.enabled = false;
+  } else {
+    if (!isModalOpen) {
+      controls.enabled = true;
+    }
+  }
+});
+
 
 //resizing van scherm
 function handleResize() {
@@ -152,6 +236,9 @@ window.addEventListener('resize', handleResize);
 
 //render loop
 function animate() {
+    const deltaTime = clock.getDelta();
+    if (animationMixer) animationMixer.update(deltaTime);
+    
     controls.update();
     renderer.render(scene, camera);
     raycaster.setFromCamera(pointer, camera);
@@ -160,14 +247,30 @@ function animate() {
     for (let i = 0; i < currentIntersects.length; i++) {
     }
     if (currentIntersects.length > 0) {
-      const currentIntersectObject = currentIntersects[0].object;    
+      const currentIntersectObject = currentIntersects[0].object;
+      
       if(currentIntersectObject.name.includes("hover")) {
+        if (currentHoveredObject !== currentIntersectObject) {
+            if (currentHoveredObject) {
+                playHoverAnimation(currentHoveredObject, false);
+            }
+            playHoverAnimation(currentIntersectObject, true);
+            currentHoveredObject = currentIntersectObject;
+        }
         document.body.style.cursor = 'pointer';
     } else {
+        if (currentHoveredObject) {
+            playHoverAnimation(currentHoveredObject, false);
+            currentHoveredObject = null;
+        }
         document.body.style.cursor = 'default';
     }
     
     } else {
+        if (currentHoveredObject) {
+            playHoverAnimation(currentHoveredObject, false);
+            currentHoveredObject = null;
+        }
         document.body.style.cursor = 'default';
     }
 }
